@@ -58,7 +58,7 @@ class Agent:
         self.current_time = 0
 
     def calculate_trajectory(self, timestep: dm_env.TimeStep):
-        time = 0.1
+        t = 0.1
         block_pose = timestep.observation['block_pose']
         tcp_pose = timestep.observation['panda_tcp_pose']
         block_hmat = tr.pos_quat_to_hmat(block_pose[:3], block_pose[3:])
@@ -69,7 +69,7 @@ class Agent:
         for frame1, frame2 in zip(self.xtrajectory, self.xtrajectory[1:]):
             velocities = np.zeros(shape=self._spec.shape, dtype=self._spec.dtype)
             omega = rmat_to_omega_vector(frame2[:-1, :3], frame1[:-1, :3])
-            velocities[:3] = (frame2[:-1, -1] - frame1[:-1, -1]) / time
+            velocities[:3] = (frame2[:-1, -1] - frame1[:-1, -1]) / t
             velocities[3:-1] = omega
             self.xvtrajectory.append(velocities)
 
