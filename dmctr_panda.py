@@ -107,12 +107,12 @@ class Agent:
                 logging.info(f"Step {self.step_no} completed taking step {self.step_no + 1}")
                 self.step_no += 1
 
-                action[:3] = ((HMatHuman(self.xtrajectory[self.step_no]).p - actual_tcp_pose.pos) / 0.1)
             else:
                 # if the desired position in trajectory is not reached then command the velocity to the same
                 # position in trajectory.
                 logging.info(f"Repeating with desired point as last step {self.step_no}")
-                action[:3] = ((expected_tcp_pos - actual_tcp_pose.pos) / 0.1)
+
+            action[:3] = ((expected_tcp_pos - actual_tcp_pose.pos) / 0.1)
 
         return action
 
