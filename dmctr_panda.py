@@ -17,34 +17,11 @@ from dm_control.composer.variation import distributions, rotations
 
 import modern_robotics as mr
 
-from dm_control.composer.variation.deterministic import Sequence
-
 np.set_printoptions(precision=3)
-
-import csv
 
 N = 100
 Tf = 0.1 * (N - 1)
 
-log_list = []
-
-
-# class Cloth(prop.Prop):
-#     """Simple cloth prop that consists of a MuJoco flexcomp."""
-#
-#     def _build(self, *args, **kwargs):
-#         del args, kwargs
-#         mjcf_root = mjcf.RootElement()
-#
-#         mjcf_root.extension.add('plugin', plugin="mujoco.elasticity.shell")
-#
-#         # Props need to contain a body called prop_root
-#         mjcf_root.worldbody.add('body', name='prop_root')
-#
-#         cloth_object = mjcf.from_file('cloth.xml')
-#         mjcf_root.attach(cloth_object)
-#
-#         super()._build('cloth', mjcf_root)
 
 class HMatHuman:
     def __init__(self, hmat):
@@ -103,11 +80,15 @@ class Agent:
         self.xtrajectory = mr.CartesianTrajectory(tcp_hmat, block_hmat, Tf, N + 1, 5)
 
     def step(self, timestep: dm_env.TimeStep) -> np.ndarray:
+
+        # if the trajectory is not yet calculated then do so. It happens only once.
         if not self.xtrajectory:
             self.calculate_trajectory(timestep)
 
         action = np.zeros(shape=self._spec.shape, dtype=self._spec.dtype)
         action[-1] = self.gripper_state
+
+        # Get the current TCP pose
         tcp_pose_mj = timestep.observation['panda_tcp_pose']
         actual_tcp_pose = PoseHuman(tcp_pose_mj)
 
@@ -116,24 +97,22 @@ class Agent:
             self.step_no = 1
 
         elif self.step_no < N:
-            expected_tcp_pos = HMatHuman(self.xtrajectory[self.step_no - 1]).p
+            # Get the expected tcp pos according to the last commanded velocity. It should be the X pos of last step
+            # as calculated by the trajectory generator - But in reality it drifts.
+            expected_tcp_pos = HMatHuman(self.xtrajectory[self.step_no]).p
 
+            # if the distance of expected and actual tcp pos are within 0.01 then the desired point is reached
+            # we can step through the next step in trajectory.
             if np.linalg.norm(expected_tcp_pos - actual_tcp_pose.pos) < 0.01:
                 logging.info(f"Step {self.step_no} completed taking step {self.step_no + 1}")
                 self.step_no += 1
 
                 action[:3] = ((HMatHuman(self.xtrajectory[self.step_no]).p - actual_tcp_pose.pos) / 0.1)
             else:
+                # if the desired position in trajectory is not reached then command the velocity to the same
+                # position in trajectory.
                 logging.info(f"Repeating with desired point as last step {self.step_no}")
-                action[:3] = ((HMatHuman(self.xtrajectory[self.step_no]).p - actual_tcp_pose.pos) / 0.1)
-
-            self.last_action = action
-
-            if self.step_no > 0:
-                logging.info(f"Last step:{self.step_no} -- expected - {expected_tcp_pos}, "
-                             f"actual = {actual_tcp_pose.pos} -- action: {action[:3]} -- "
-                             f"cmd_pos: {actual_tcp_pose.pos + action[:3]* 0.1} -- "
-                             f"dist= {np.linalg.norm(expected_tcp_pos - actual_tcp_pose.pos)}")
+                action[:3] = ((expected_tcp_pos - actual_tcp_pose.pos) / 0.1)
 
         return action
 
@@ -159,7 +138,7 @@ if __name__ == '__main__':
     theta = (np.pi/2) * np.random.random()
     initialize_props = entity_initializer.prop_initializer.PropPlacer(
         props,
-        position=[0.4, -0.4, 0.1],
+        position=[0.3, -0.3, 0.1],
         quaternion=rotations.UniformQuaternion())
 
     panda_env.add_entity_initializers([initialize_props])
@@ -176,16 +155,3 @@ if __name__ == '__main__':
             app.launch(env, policy=agent.step)
         else:
             run_loop.run(env, agent, [], max_steps=N, real_time=True)
-
-        # with open("log_list.csv", "w") as f:
-        #     wr = csv.writer(f, quoting=csv.QUOTE_ALL)
-        #     lines = []
-        #     for line in log_list:
-        #         templ = list()
-        #         for l in line:
-        #             for el in l:
-        #                 templ.append(el)
-        #         lines.append(templ)
-        #     for line in lines:
-        #         str_line = [str(el) for el in line]
-        #         wr.writerow(str_line)
